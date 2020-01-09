@@ -16,8 +16,6 @@ import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Session;
 import com.datastax.killrvideo.it.util.HostAndPortSplitter;
 import com.datastax.killrvideo.it.util.ServiceChecker;
-import com.xqbase.etcd4j.EtcdClient;
-import com.xqbase.etcd4j.EtcdNode;
 
 @Configuration
 public class CassandraConfiguration {
@@ -26,35 +24,19 @@ public class CassandraConfiguration {
     private static final String KEYSPACE_NAME = "killrvideo";
 
     @Inject
-    private EtcdClient etcdClient;
+    private KillrVideoProperties properties;
 
     @Bean(destroyMethod = "close")
     public Session getSession() throws Exception {
-        final List<EtcdNode> etcdNodes = etcdClient.listDir("killrvideo/services/cassandra");
-        if (CollectionUtils.isEmpty(etcdNodes)) {
-            throw new IllegalStateException(format("Cannot find any Cassandra service in etcd. " +
-                    "Please wait until Cassandra has successfully started"));
-        } else {
-            final EtcdNode cassandraAddress = etcdNodes.get(0);
-            final String hostAndPort = cassandraAddress.value;
-            assert hostAndPort != null;
-            HostAndPortSplitter.ensureValidFormat(hostAndPort,
-                    format("The %s is not a valid host:port format", hostAndPort));
+        ServiceChecker.waitForService("Cassandra", properties.cassandraHost, properties.cassandraPort, WAIT_TIME_IN_SECONDS);
 
-            final String address = HostAndPortSplitter.extractAddress(hostAndPort);
-            final int port = HostAndPortSplitter.extractPort(hostAndPort);
+        final Cluster cluster = Cluster
+                .builder()
+                .addContactPoint(properties.cassandraHost)
+                .withPort(properties.cassandraPort)
+                .withClusterName(CLUSTER_NAME)
+                .build();
 
-            ServiceChecker.waitForService("Cassandra", address, port, WAIT_TIME_IN_SECONDS);
-
-            final Cluster cluster = Cluster
-                    .builder()
-                    .addContactPoint(address)
-                    .withPort(port)
-                    .withClusterName(CLUSTER_NAME)
-                    .build();
-
-            return cluster.connect();
-        }
-
+        return cluster.connect();
     }
 }

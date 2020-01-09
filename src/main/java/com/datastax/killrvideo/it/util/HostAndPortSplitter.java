@@ -5,7 +5,7 @@ import java.util.regex.Pattern;
 
 public class HostAndPortSplitter {
 
-    public static Pattern HOST_AND_PORT_PATTERN = Pattern.compile("(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}):(\\d+)");
+    public static Pattern HOST_AND_PORT_PATTERN = Pattern.compile("(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|[A-Za-z0-9\\-_]+):(\\d+)");
 
     public static void ensureValidFormat(String hostAndPort, String errorMsg) {
         final Matcher matcher = HOST_AND_PORT_PATTERN.matcher(hostAndPort);

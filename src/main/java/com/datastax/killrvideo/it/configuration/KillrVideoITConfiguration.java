@@ -20,7 +20,6 @@ import org.springframework.context.annotation.Configuration;
 import com.datastax.killrvideo.it.async.KillrVideoThreadFactory;
 import com.datastax.killrvideo.it.util.HostAndPortSplitter;
 import com.datastax.killrvideo.it.util.ServiceChecker;
-import com.xqbase.etcd4j.EtcdClient;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -40,47 +39,28 @@ public class KillrVideoITConfiguration {
     public static final String SUGGESTED_VIDEOS_SERVICE_NAME = "SuggestedVideoService";
 
     @Inject
-    private EtcdClient etcdClient;
-
-    @Inject
     private KillrVideoProperties properties;
 
     @Bean
     public ManagedChannel getManagedChannel() throws Exception {
-        final String grpcUserServiceUrl = "killrvideo/services/"
-                + USER_SERVICE_NAME
-                + "/"
-                + properties.applicationName;
+        final String hostAndPort = properties.services.get(USER_SERVICE_NAME);  
+        HostAndPortSplitter.ensureValidFormat(hostAndPort,
+                format("The %s is not a valid host:port format", hostAndPort));
 
-        while (!ServiceChecker.isServicePresent(etcdClient, grpcUserServiceUrl)) {
-            System.out.println("Waiting 10 seconds for KillrVideoServer services to be registered: " + grpcUserServiceUrl);
-            Thread.sleep(10000);
-        }
+        final String address = HostAndPortSplitter.extractAddress(hostAndPort);
+        final int port = HostAndPortSplitter.extractPort(hostAndPort);
 
-        final Optional<String> foundKillrVideoServer = Optional.ofNullable(etcdClient.get(grpcUserServiceUrl));
+        ServiceChecker.waitForService("KillrVideoServer " + USER_SERVICE_NAME, address, port, WAIT_TIME_IN_SECONDS);
 
-        if (!foundKillrVideoServer.isPresent()) {
-            throw new IllegalStateException(format("Cannot look up service name %s from etcd. Please ensure you start KillrVideoServer before",
-                    grpcUserServiceUrl));
-        } else {
-            final String hostAndPort = foundKillrVideoServer.get();
-            HostAndPortSplitter.ensureValidFormat(hostAndPort,
-                    format("The %s is not a valid host:port format", hostAndPort));
+        System.out.println("Waiting 2 seconds for KillrVideoServer complete startup (conservative approach)");
 
-            final String address = HostAndPortSplitter.extractAddress(hostAndPort);
-            final int port = HostAndPortSplitter.extractPort(hostAndPort);
+        Thread.sleep(2000);
 
-            ServiceChecker.waitForService("KillrVideoServer " + USER_SERVICE_NAME, address, port, WAIT_TIME_IN_SECONDS);
+        return ManagedChannelBuilder
+                .forAddress(address, port)
+                .usePlaintext(true)
+                .build();
 
-            System.out.println("Waiting 2 seconds for KillrVideoServer complete startup (conservative approach)");
-
-            Thread.sleep(2000);
-
-            return ManagedChannelBuilder
-                    .forAddress(address, port)
-                    .usePlaintext(true)
-                    .build();
-        }
     }
 
     @Bean(destroyMethod = "shutdownNow")
